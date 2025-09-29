@@ -1,50 +1,62 @@
 // frontend/src/App.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Map from './components/Map';
 import SidePanel from './components/SidePanel';
 import { runImpactSimulation } from './services/simulationService';
 
 function App() {
+  // 'idle' -> 'targeting' -> 'loading' -> 'results'
+  const [appState, setAppState] = useState('idle');
+  const [targetLocation, setTargetLocation] = useState(null);
   const [impactData, setImpactData] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [density, setDensity] = useState(1000); // Default to suburban
-  const [lastImpactLocation, setLastImpactLocation] = useState(null);
+  const [currentPage, setCurrentPage] = useState(0);
 
-  // This function handles the initial map click
-  const handleMapClick = async (latlng) => {
-    setIsLoading(true);
-    setError(null);
-    setLastImpactLocation(latlng); // Save the location
-    
+  const handleMapClick = (latlng) => {
+    // This function is called by the Map component when a target is selected
+    setTargetLocation(latlng);
+    setAppState('targeting');
+  };
+
+  const handleLaunch = async () => {
+    // This function is called by the SidePanel when the LAUNCH button is clicked
+    if (!targetLocation) return;
+    setAppState('loading');
     try {
-      // Pass the current density setting to the API
-      const locationWithDensity = { lat: latlng.lat, lng: latlng.lng, population_density: density };
-      const results = await runImpactSimulation(locationWithDensity);
-      setImpactData(results);
-    } catch (err) {
-      setError('Failed to fetch simulation.');
-    } finally {
-      setIsLoading(false);
+      const data = await runImpactSimulation(targetLocation);
+      setImpactData(data); // Store the full results from the backend
+      setCurrentPage(0); // Reset to the first page of results
+      setAppState('results');
+    } catch (error) {
+      console.error("Simulation failed", error);
+      // Handle error state here if desired (e.g., show an error message)
+      handleReset();
     }
   };
-  
-  // This effect re-runs the simulation if the density is changed
-  useEffect(() => {
-    // Only re-run if there was a previous impact
-    if (lastImpactLocation && impactData?.simulation_results.impact_type === 'land') {
-      handleMapClick(lastImpactLocation);
-    }
-  }, [density]); // Dependency array: this effect runs ONLY when 'density' changes
+
+  const handleReset = () => {
+    // This resets the entire application to its initial state
+    setAppState('idle');
+    setTargetLocation(null);
+    setImpactData(null);
+    setCurrentPage(0);
+  };
 
   return (
     <div className="flex flex-col md:flex-row h-screen bg-gray-800">
-      <Map onMapClick={handleMapClick} impactData={impactData} />
+      <Map 
+        appState={appState}
+        onMapClick={handleMapClick} 
+        targetLocation={targetLocation}
+        impactData={impactData} // Pass the full data to the map for visualization
+      />
       <SidePanel 
-        results={impactData ? impactData.simulation_results : null} 
-        isLoading={isLoading} 
-        density={density}
-        setDensity={setDensity}
+        appState={appState}
+        targetLocation={targetLocation}
+        results={impactData ? impactData.simulation_results : null} // Pass just the results part to the panel
+        onLaunch={handleLaunch}
+        onReset={handleReset}
+        currentPage={currentPage}
+        setCurrentPage={setCurrentPage}
       />
     </div>
   );

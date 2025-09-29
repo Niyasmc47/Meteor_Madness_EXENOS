@@ -2,35 +2,39 @@
 
 **A NASA Space Apps Challenge 2025 Project**
 
-This project is an interactive, data-driven web application that simulates the effects of a hypothetical asteroid, "Impactor-2025," striking a user-chosen location on Earth. Using real data from NASA's Near-Earth Object (NEO) API and elevation data from the U.S. Geological Survey (USGS), our simulation engine realistically models different impact scenarios for both land and water.
+This project is an interactive, data-driven web application that simulates the effects of a hypothetical asteroid, "Impactor-2025," striking a user-chosen location on Earth. The simulation is highly dynamic, adapting its calculations based on the real-world geography and geology of the impact site, leveraging data from NASA and the U.S. Geological Survey (USGS).
+
+The application provides a detailed breakdown of the aftermath, including crater dimensions, thermal effects, air blast shockwaves, seismic magnitude, and tsunami generation, making it a powerful educational tool for visualizing the complex consequences of an asteroid impact.
 
 ## The Challenge
 
-This project addresses the ["Meteor Madness"](https://www.spaceappschallenge.org/2025/challenges/meteor-madness/) challenge. Our goal is to create a tool that is not only engaging but also grounded in scientific reality, using NASA and USGS datasets to model and visualize the complex consequences of an asteroid impact.
+This project directly addresses the ["Meteor Madness"](https://www.spaceappschallenge.org/2025/challenges/meteor-madness/) challenge. Our goal is to create a tool that is not only visually engaging but also grounded in scientific reality, using a rich stack of NASA and partner datasets to model a realistic impact scenario.
 
-## Features
+## Key Features
 
--   **Interactive Map:** Users can select any location on a global map to target the impact.
--   **Dynamic Simulation Engine:** The backend intelligently determines if the impact is on land or in water by querying the USGS Elevation API.
-    -   **Land Impacts:** Calculates and visualizes crater size, fireball radius, and seismic effects.
-    -   **Water Impacts:** Calculates tsunami wave creation and propagation, estimating wave height at various distances from the impact site.
--   **Data-Driven Simulation:** "Impactor-2025" characteristics (diameter, velocity, density) are based on real data for Potentially Hazardous Asteroid 99942 Apophis.
--   **Contextual Data:** The calculated earthquake magnitude is compared to well-known historical earthquakes to make the data more relatable.
+-   **Interactive Global Map:** Users can select any point on Earth to simulate an impact.
+-   **Dynamic Geological Modeling:** The backend intelligently queries the USGS Elevation API to determine the impact site's elevation. This data is then used to model the ground type (e.g., Soft Sedimentary Rock, Hard Crystalline Mountain Rock), which dynamically alters the crater size and seismic energy transfer.
+-   **Land vs. Water Scenarios:**
+    -   **Land Impacts:** The simulation calculates crater dimensions (diameter, radius, depth), fireball radius for 3rd-degree burns, air blast overpressure at various distances, and seismic magnitude.
+    -   **Water Impacts:** The simulation models tsunami wave generation, calculating initial wave height, propagation to different distances, and arrival times. It also provides a visual "danger zone" on the map.
+-   **Data-Driven Simulation:** The fictional "Impactor-2025" is based on the physical characteristics (size, velocity, density) of the real Potentially Hazardous Asteroid **99942 Apophis**, using data from NASA's NEO API.
+-   **Rich, Contextual Data:** To make the results understandable, the simulation compares seismic effects to famous historical earthquakes and tsunami heights to major historical events.
+-   **Interactive Sidepanel:** A detailed sidepanel provides a complete report of the simulation results, updating in real-time with each new impact.
 
 ## Tech Stack
 
--   **Frontend:** React (with Vite), Tailwind CSS for styling, and Leaflet for the interactive map.
+-   **Frontend:** React (with Vite), Tailwind CSS for styling, Leaflet for the interactive map, and Axios for API communication.
 -   **Backend:** Python with the Django framework and Django REST Framework for building the API.
 -   **Database:**
-    -   **MongoDB:** Used for application-specific data (e.g., logging simulations), accessed via `pymongo`.
+    -   **MongoDB:** Used for application-specific data, accessed via `pymongo`.
     -   **SQLite:** Used by Django for its internal applications (admin, auth).
 
 ## NASA & Partner Data Resources Used
 
--   **NASA Near-Earth Object (NEO) Web Service API:** To provide the base physical characteristics for our fictional "Impactor-2025."
--   **USGS National Map Elevation Data:** Utilized via the **Elevation Point Query Service API** to determine the impact site's elevation, allowing for differentiation between land and water impacts.
--   **U.S. Geological Survey (USGS) Earthquake Catalog:** Used as a reference to provide context for the seismic impact of a land-based event.
--   **Impact Physics Models:** Based on widely accepted academic formulas for calculating asteroid impact effects, including crater formation and tsunami generation.
+-   **NASA Near-Earth Object (NEO) Web Service API:** Provides the base physical characteristics (size, velocity) for our asteroid model.
+-   **USGS National Map Elevation Data:** Utilized via the real-time **Elevation Point Query Service API**. This is the core dataset enabling our dynamic land vs. water differentiation and our geological ground-type modeling.
+-   **U.S. Geological Survey (USGS) Earthquake Catalog:** Referenced to provide relatable context for the seismic magnitude of a land-based impact.
+-   **Scientific Models & Scaling Laws:** The backend simulation engine is built upon established academic formulas (e.g., from H.J. Melosh, Collins et al.) for calculating impact effects, ensuring the results are scientifically plausible.
 
 ## Project Setup
 
@@ -38,7 +42,7 @@ This project addresses the ["Meteor Madness"](https://www.spaceappschallenge.org
 
 -   Python 3.8+
 -   Node.js 16+ and npm
--   A running MongoDB instance (local or cloud-based like MongoDB Atlas).
+-   A running MongoDB instance (e.g., from MongoDB Atlas).
 
 ### Backend Setup
 
@@ -48,16 +52,12 @@ This project addresses the ["Meteor Madness"](https://www.spaceappschallenge.org
     python -m venv venv
     source venv/bin/activate  # On Windows: venv\Scripts\activate
     ```
-3.  Install dependencies from the requirements file:
-    ```bash
-    pip install -r requirements.txt
-    ```
-4.  Create a `.env` file in the `backend` directory and add your MongoDB connection string and NASA API Key:
+3.  Install dependencies: `pip install -r requirements.txt`
+4.  Create a `.env` file in the `backend` directory and add your MongoDB connection string:
     ```
     MONGO_URI=your_mongodb_connection_string
-    NASA_API_KEY=your_nasa_api_key
     ```
-5.  Run Django's initial migrations for its internal apps (this will create a `db.sqlite3` file):
+5.  Run Django's initial migrations (this creates `db.sqlite3` for internal apps):
     ```bash
     python manage.py migrate
     ```
@@ -65,7 +65,6 @@ This project addresses the ["Meteor Madness"](https://www.spaceappschallenge.org
     ```bash
     python manage.py runserver
     ```
-    The backend will be available at `http://127.0.0.1:8000`.
 
 ### Frontend Setup
 
@@ -78,4 +77,4 @@ This project addresses the ["Meteor Madness"](https://www.spaceappschallenge.org
     ```bash
     npm run dev
     ```
-4.  Open your browser to `http://localhost:5173` (or the address provided by Vite).
+4.  Open your browser to `http://localhost:5173`.
