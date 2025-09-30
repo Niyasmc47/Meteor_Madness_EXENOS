@@ -1,4 +1,4 @@
-# Meteor Madness: Impactor-2025
+# Meteor Madness: Impactor-2025  [current progress the sidepanel showing no data]
 
 **A NASA Space Apps Challenge 2025 Project**
 
