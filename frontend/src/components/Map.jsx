@@ -76,26 +76,16 @@ const VisualizationLayer = ({ results }) => {
     
     return (
       <>
-        {/* Crater - Dark Red */}
+        {/* Shockwave - Purple (Largest, draw first) */}
         <Circle 
           center={center} 
-          radius={craterRadius} 
+          radius={shockwaveRadius} 
           pathOptions={{ 
-            color: '#8B0000', 
-            fillColor: '#8B0000', 
-            fillOpacity: 0.7,
-            weight: 2 
-          }} 
-        />
-        {/* Fireball - Bright Orange */}
-        <Circle 
-          center={center} 
-          radius={fireballRadius} 
-          pathOptions={{ 
-            color: '#FF4500', 
-            fillColor: '#FF6347', 
-            fillOpacity: 0.5,
-            weight: 2 
+            color: '#9370DB', 
+            fillColor: '#9370DB', 
+            fillOpacity: 0.15,
+            weight: 2,
+            dashArray: '10, 10'
           }} 
         />
         {/* Thermal Effects - Yellow */}
@@ -110,16 +100,26 @@ const VisualizationLayer = ({ results }) => {
             dashArray: '5, 5'
           }} 
         />
-        {/* Shockwave - Purple */}
+        {/* Fireball - Bright Orange */}
         <Circle 
           center={center} 
-          radius={shockwaveRadius} 
+          radius={fireballRadius} 
           pathOptions={{ 
-            color: '#9370DB', 
-            fillColor: '#9370DB', 
-            fillOpacity: 0.15,
-            weight: 2,
-            dashArray: '10, 10'
+            color: '#FF4500', 
+            fillColor: '#FF6347', 
+            fillOpacity: 0.5,
+            weight: 2 
+          }} 
+        />
+        {/* Crater - Dark Red (Smallest, draw last/on top) */}
+        <Circle 
+          center={center} 
+          radius={craterRadius} 
+          pathOptions={{ 
+            color: '#8B0000', 
+            fillColor: '#8B0000', 
+            fillOpacity: 0.7,
+            weight: 2 
           }} 
         />
       </>
@@ -132,18 +132,7 @@ const VisualizationLayer = ({ results }) => {
     
     return (
       <>
-        {/* Initial wave splash */}
-        <Circle 
-          center={center} 
-          radius={waveRadius} 
-          pathOptions={{ 
-            color: '#00CED1', 
-            fillColor: '#00CED1', 
-            fillOpacity: 0.6,
-            weight: 2 
-          }} 
-        />
-        {/* Danger zone */}
+        {/* Danger zone (Largest, draw first) */}
         {dangerRadius > 0 && (
           <Circle 
             center={center} 
@@ -157,6 +146,17 @@ const VisualizationLayer = ({ results }) => {
             }} 
           />
         )}
+        {/* Initial wave splash (Smallest, draw last) */}
+        <Circle 
+          center={center} 
+          radius={waveRadius} 
+          pathOptions={{ 
+            color: '#00CED1', 
+            fillColor: '#00CED1', 
+            fillOpacity: 0.6,
+            weight: 2 
+          }} 
+        />
       </>
     );
   }
