@@ -1,4 +1,4 @@
-# ☄️ Meteor Madness EXENOS
+#  Meteor Madness EXENOS
 
 Welcome to **Meteor Madness EXENOS** – an interactive, scientifically-grounded web application that simulates asteroid impacts on Earth. Built with a powerful Django backend and a stunning React 3D frontend, this simulator provides real-time asteroid data fetched from NASA's NEO API and visualizes the devastating geological and populated impacts of near-Earth objects.
 
