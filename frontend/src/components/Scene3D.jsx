@@ -6,7 +6,7 @@ import Earth3D from './Earth3D';
 import Asteroid3D from './Asteroid3D';
 import DangerZones3D from './DangerZones3D';
 
-function Scene3D({ appState, onMapClick, targetLocation, impactData }) {
+function Scene3D({ appState, onMapClick, targetLocation, impactData, deflectionData, onAnimationComplete }) {
   // Loading fallback
   const Loader = () => (
     <div className="flex items-center justify-center h-full bg-black text-white">
@@ -74,6 +74,9 @@ function Scene3D({ appState, onMapClick, targetLocation, impactData }) {
               }
             }}
             isOrbiting={appState === 'idle' || appState === 'targeting'}
+            appState={appState}
+            targetLocation={targetLocation}
+            onAnimationComplete={onAnimationComplete}
             modelPath={null}
           />
           
@@ -90,6 +93,7 @@ function Scene3D({ appState, onMapClick, targetLocation, impactData }) {
             enableDamping
             dampingFactor={0.05}
             rotateSpeed={0.5}
+            enabled={appState !== 'animating'}
           />
         </Suspense>
       </Canvas>

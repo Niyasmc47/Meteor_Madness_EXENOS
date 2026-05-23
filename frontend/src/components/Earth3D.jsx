@@ -27,79 +27,35 @@ function Earth3D({ onEarthClick, targetLocation }) {
     }
   });
 
-  // Handle click on Earth
   const handleClick = (event) => {
     event.stopPropagation();
     
-    // BEST METHOD: Use UV coordinates from the texture mapping
-    // This perfectly matches the 2D map since both use the same texture/coordinate system
-    if (event.uv) {
-      // UV coordinates: u (0 to 1) = longitude, v (0 to 1) = latitude
-      // u: 0 = -180°, 0.5 = 0°, 1 = 180°
-      // v: 0 = 90° (north pole), 0.5 = 0°, 1 = -90° (south pole)
-      
-      const u = event.uv.x;
-      const v = event.uv.y;
-      
-      // Convert UV to geographic coordinates
-      // Longitude: map u from [0,1] to [-180,180] with slight adjustment
-      let lng = (u * 360) - 180;
-      
-      // Fine-tune adjustment: shift slightly to the right (east) by 10 degrees
-      lng = lng + 2.2;
-      
-      // Latitude: map v from [0,1] to [-90,90] (inverted)
-      // v=0 should be south pole (-90°), v=1 should be north pole (90°)
-      let lat = (v * 180) - 90;
-      
-      // Account for Earth's rotation
-      const earthRotationDegrees = earthRef.current ? (earthRef.current.rotation.y * (180 / Math.PI)) : 0;
-      lng = lng - earthRotationDegrees;
-      
-      // Normalize longitude to -180 to 180 range
-      lng = ((lng + 180) % 360) - 180;
-      if (lng < -180) lng += 360;
-      if (lng > 180) lng -= 360;
-      
-      console.log('Earth clicked (UV method):', { 
-        uv: { u: u.toFixed(3), v: v.toFixed(3) },
-        rotation: earthRotationDegrees.toFixed(2) + '°',
-        lat: lat.toFixed(4), 
-        lng: lng.toFixed(4) 
-      });
-      
-      if (onEarthClick) {
-        onEarthClick({ lat: parseFloat(lat.toFixed(4)), lng: parseFloat(lng.toFixed(4)) });
-      }
-      
-      // Stop rotation when user interacts
-      setIsRotating(false);
-      return;
-    }
+    if (!earthRef.current) return;
+
+    // Convert the click point to local coordinates of the Earth sphere
+    const localPoint = earthRef.current.worldToLocal(event.point.clone());
     
-    // Fallback: Old method if UV not available (shouldn't happen)
-    const intersectionPoint = event.point;
-    const radius = Math.sqrt(
-      intersectionPoint.x ** 2 + 
-      intersectionPoint.y ** 2 + 
-      intersectionPoint.z ** 2
-    );
+    // Calculate lat/lng from local point on the unit sphere
+    const lat = Math.asin(localPoint.y) * (180 / Math.PI);
+    const lng = Math.atan2(localPoint.x, localPoint.z) * (180 / Math.PI);
     
-    const nx = intersectionPoint.x / radius;
-    const ny = intersectionPoint.y / radius;
-    const nz = intersectionPoint.z / radius;
+    const earthRotationDegrees = earthRef.current.rotation.y * (180 / Math.PI);
     
-    const lat = Math.asin(ny) * (180 / Math.PI);
-    const earthRotationDegrees = earthRef.current ? (earthRef.current.rotation.y * (180 / Math.PI)) : 0;
-    let lng = Math.atan2(nz, -nx) * (180 / Math.PI) - 90 - earthRotationDegrees;
-    lng = ((lng + 180) % 360) - 180;
-    
-    console.log('Earth clicked (fallback):', { lat: lat.toFixed(4), lng: lng.toFixed(4) });
+    console.log('Earth clicked:', { 
+      lat: lat.toFixed(4), 
+      lng: lng.toFixed(4),
+      rotation: earthRotationDegrees.toFixed(2) + '°'
+    });
     
     if (onEarthClick) {
-      onEarthClick({ lat: parseFloat(lat.toFixed(4)), lng: parseFloat(lng.toFixed(4)) });
+      onEarthClick({ 
+        lat: parseFloat(lat.toFixed(4)), 
+        lng: parseFloat(lng.toFixed(4)),
+        earthRotation: earthRef.current.rotation.y 
+      });
     }
     
+    // Stop rotation when user interacts
     setIsRotating(false);
   };
 
@@ -160,26 +116,36 @@ function Earth3D({ onEarthClick, targetLocation }) {
       
       {/* Target marker if location selected */}
       {targetLocation && (
-        <TargetMarker lat={targetLocation.lat} lng={targetLocation.lng} />
+        <TargetMarker 
+          lat={targetLocation.lat} 
+          lng={targetLocation.lng} 
+          earthRotation={targetLocation.earthRotation || (earthRef.current ? earthRef.current.rotation.y : 0)} 
+        />
       )}
     </group>
   );
 }
 
 // Target marker component - Static red dot like 2D map
-function TargetMarker({ lat, lng }) {
-  // Convert lat/lng to 3D coordinates
+function TargetMarker({ lat, lng, earthRotation = 0 }) {
+  // Convert lat/lng to 3D coordinates in world space (accounting for earth rotation)
   const position = useMemo(() => {
     const radius = 1.02; // Slightly above Earth surface
     const phi = (90 - lat) * (Math.PI / 180);
-    const theta = (lng + 180) * (Math.PI / 180);
+    const theta = lng * (Math.PI / 180);
     
-    const x = -(radius * Math.sin(phi) * Math.cos(theta));
-    const z = radius * Math.sin(phi) * Math.sin(theta);
-    const y = radius * Math.cos(phi);
+    // Base position on unrotated sphere
+    const xBase = radius * Math.sin(phi) * Math.sin(theta);
+    const yBase = radius * Math.cos(phi);
+    const zBase = radius * Math.sin(phi) * Math.cos(theta);
+    
+    // Apply Earth's rotation (around Y axis)
+    const x = xBase * Math.cos(earthRotation) + zBase * Math.sin(earthRotation);
+    const y = yBase;
+    const z = -xBase * Math.sin(earthRotation) + zBase * Math.cos(earthRotation);
     
     return [x, y, z];
-  }, [lat, lng]);
+  }, [lat, lng, earthRotation]);
 
   return (
     <mesh position={position}>

@@ -47,13 +47,22 @@ function Simulator() {
     try {
       const data = await runImpactSimulation(targetLocation);
       setImpactData(data);
-      setCurrentPage(0);
-      setAppState('results');
+      if (view3D) {
+        setAppState('animating');
+      } else {
+        setCurrentPage(0);
+        setAppState('results');
+      }
     } catch (err) {
       const errorMessage = err.response?.data?.error || "A connection error occurred. Please try again.";
       setError(errorMessage);
       setAppState('targeting');
     }
+  };
+
+  const handleAnimationComplete = () => {
+    setCurrentPage(0);
+    setAppState('results');
   };
 
   const handleReset = () => {
@@ -106,6 +115,7 @@ function Simulator() {
             targetLocation={targetLocation}
             impactData={impactData}
             deflectionData={deflectionData}
+            onAnimationComplete={handleAnimationComplete}
           />
         ) : (
           <Map

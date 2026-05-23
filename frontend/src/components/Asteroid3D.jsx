@@ -1,6 +1,6 @@
 // frontend/src/components/Asteroid3D.jsx
 import React, { useRef, useMemo } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import * as THREE from 'three';
 
@@ -50,10 +50,60 @@ function keplerianToCartesian(a, e, i, omega, w, M) {
   return new THREE.Vector3(X, Z, Y); // swap axes to match scene orientation
 }
 
-function Asteroid3D({ asteroidData, isOrbiting = true }) {
+function Asteroid3D({ asteroidData, isOrbiting = true, appState, targetLocation, onAnimationComplete }) {
+  const { camera } = useThree();
   const asteroidRef = useRef();
   const orbitRef = useRef();
+  const explosionRef = useRef();
+  const fireTrailRef = useRef();
+  const asteroidGroupRef = useRef();
+  const initialCameraState = useRef({ pos: null, rot: null });
   
+  const [animationPhase, setAnimationPhase] = React.useState('orbiting');
+  const [startPosition, setStartPosition] = React.useState(null);
+  const timingRef = useRef({ fallStart: 0, explosionStart: 0 });
+
+  // Calculate target 3D position based on lat/lng and Earth's rotation
+  const targetPosition = useMemo(() => {
+    if (!targetLocation) return new THREE.Vector3(0, 0, 0);
+    const radius = 1.01; // Slightly above Earth surface
+    const lat = targetLocation.lat;
+    const lng = targetLocation.lng;
+    const earthRotation = targetLocation.earthRotation || 0;
+    
+    const phi = (90 - lat) * (Math.PI / 180);
+    const theta = lng * (Math.PI / 180);
+    
+    const xBase = radius * Math.sin(phi) * Math.sin(theta);
+    const yBase = radius * Math.cos(phi);
+    const zBase = radius * Math.sin(phi) * Math.cos(theta);
+    
+    const x = xBase * Math.cos(earthRotation) + zBase * Math.sin(earthRotation);
+    const y = yBase;
+    const z = -xBase * Math.sin(earthRotation) + zBase * Math.cos(earthRotation);
+    
+    return new THREE.Vector3(x, y, z);
+  }, [targetLocation]);
+
+  // Handle App State changes for animations
+  React.useEffect(() => {
+    if (appState === 'animating' && targetLocation) {
+      setAnimationPhase('falling');
+      timingRef.current.fallStart = 0; // Will be set in useFrame
+      if (asteroidGroupRef.current) {
+        setStartPosition(asteroidGroupRef.current.position.clone());
+      }
+    } else if (appState === 'idle' || appState === 'targeting') {
+      setAnimationPhase('orbiting');
+      if (asteroidGroupRef.current) asteroidGroupRef.current.visible = true;
+      if (explosionRef.current) explosionRef.current.visible = false;
+    } else if (appState === 'results') {
+      setAnimationPhase('done');
+      if (asteroidGroupRef.current) asteroidGroupRef.current.visible = false;
+      if (explosionRef.current) explosionRef.current.visible = false;
+    }
+  }, [appState, targetLocation]);
+
   // Debug logging
   React.useEffect(() => {
     if (asteroidData) {
@@ -132,7 +182,7 @@ function Asteroid3D({ asteroidData, isOrbiting = true }) {
     }
 
     return new THREE.BufferGeometry().setFromPoints(points);
-  }, [orbitParams]);
+  }, [orbitParams, asteroidData]);
 
   // Simple gray sphere material
   const asteroidMaterial = useMemo(() => {
@@ -143,11 +193,14 @@ function Asteroid3D({ asteroidData, isOrbiting = true }) {
     });
   }, []);
 
-  // Animate asteroid orbit
+  // Animate asteroid orbit or falling
   useFrame((state) => {
-    if (asteroidRef.current && isOrbiting) {
+    if (!asteroidGroupRef.current) return;
+    
+    if (animationPhase === 'orbiting') {
       const elapsed = state.clock.elapsedTime;
-      // Prefer cleaned orbital elements (numeric) from backend response
+      let pos = new THREE.Vector3();
+
       const elems = asteroidData && asteroidData.orbital_elements ? asteroidData.orbital_elements : null;
       if (elems && elems.a_au) {
         try {
@@ -157,104 +210,217 @@ function Asteroid3D({ asteroidData, isOrbiting = true }) {
           const omega = ((parseFloat(elems.raan_deg) || 0) * Math.PI) / 180.0;
           const w = ((parseFloat(elems.argp_deg) || 0) * Math.PI) / 180.0;
 
-          // Use a simple time-based mean anomaly for visible animation
-          // Complete orbit every 20 seconds for demo purposes
-          const orbitPeriod = 20.0; // seconds for one complete orbit
-          const M_now = (elapsed / orbitPeriod) * (2 * Math.PI); // Mean anomaly increases with time
+          const orbitPeriod = 20.0;
+          const M_now = (elapsed / orbitPeriod) * (2 * Math.PI); 
 
-          // Scale to near-Earth orbit (normalized by semi-major axis)
-          const pos = keplerianToCartesian(a_au, e, iRad, omega, w, M_now).multiplyScalar(2.0 / a_au);
-          asteroidRef.current.position.set(pos.x, pos.y, pos.z);
-          
-          // Debug log every 5 seconds
-          if (Math.floor(elapsed) % 5 === 0 && Math.floor(elapsed) !== Math.floor(elapsed - 0.016)) {
-            console.log('🪨 Asteroid position:', {
-              x: pos.x.toFixed(2),
-              y: pos.y.toFixed(2), 
-              z: pos.z.toFixed(2),
-              distance: Math.sqrt(pos.x*pos.x + pos.y*pos.y + pos.z*pos.z).toFixed(2),
-              M_deg: ((M_now * 180 / Math.PI) % 360).toFixed(1)
-            });
-          }
+          pos = keplerianToCartesian(a_au, e, iRad, omega, w, M_now).multiplyScalar(2.0 / a_au);
         } catch (err) {
-          // fallback
           const t = elapsed * orbitParams.speed;
           const { semiMajorAxis, eccentricity, inclination } = orbitParams;
-          const angle = t;
-          const r = semiMajorAxis * (1 - eccentricity * eccentricity) / (1 + eccentricity * Math.cos(angle));
-          const x = r * Math.cos(angle);
-          const z = r * Math.sin(angle);
-          const y = z * Math.sin(inclination);
-          asteroidRef.current.position.set(x, y, z);
+          const r = semiMajorAxis * (1 - eccentricity * eccentricity) / (1 + eccentricity * Math.cos(t));
+          pos.set(r * Math.cos(t), r * Math.sin(t) * Math.sin(inclination), r * Math.sin(t));
         }
       } else {
         const t = elapsed * orbitParams.speed;
         const { semiMajorAxis, eccentricity, inclination } = orbitParams;
-        const angle = t;
-        const r = semiMajorAxis * (1 - eccentricity * eccentricity) / (1 + eccentricity * Math.cos(angle));
-        const x = r * Math.cos(angle);
-        const z = r * Math.sin(angle);
-        const y = z * Math.sin(inclination);
-        asteroidRef.current.position.set(x, y, z);
+        const r = semiMajorAxis * (1 - eccentricity * eccentricity) / (1 + eccentricity * Math.cos(t));
+        pos.set(r * Math.cos(t), r * Math.sin(t) * Math.sin(inclination), r * Math.sin(t));
       }
       
-      // Irregular tumbling rotation for realism (asteroids tumble in space)
-      asteroidRef.current.rotation.x += 0.008;
-      asteroidRef.current.rotation.y += 0.012;
-      asteroidRef.current.rotation.z += 0.005;
+      asteroidGroupRef.current.position.set(pos.x, pos.y, pos.z);
+      
+      if (asteroidRef.current) {
+        asteroidRef.current.rotation.x += 0.008;
+        asteroidRef.current.rotation.y += 0.012;
+        asteroidRef.current.rotation.z += 0.005;
+      }
+    } else if (animationPhase === 'falling') {
+      if (timingRef.current.fallStart === 0) {
+        timingRef.current.fallStart = state.clock.elapsedTime;
+        initialCameraState.current.pos = camera.position.clone();
+        initialCameraState.current.rot = camera.rotation.clone();
+      }
+      
+      const elapsed = state.clock.elapsedTime - timingRef.current.fallStart;
+      const duration = 5.0; // 5 seconds for slow motion cinematic fall
+      let progress = Math.min(elapsed / duration, 1.0);
+      
+      // Gravity easing (accelerate downwards, but smoother for slow-mo)
+      const easedProgress = Math.pow(progress, 1.5);
+      
+      if (startPosition) {
+        // Convert positions to spherical coordinates for orbital interpolation
+        const startSpherical = new THREE.Spherical().setFromVector3(startPosition);
+        const targetSpherical = new THREE.Spherical().setFromVector3(targetPosition);
+        
+        // Ensure shortest path for phi (latitude-ish)
+        let deltaTheta = targetSpherical.theta - startSpherical.theta;
+        // Normalize deltaTheta to -PI to PI
+        deltaTheta = Math.atan2(Math.sin(deltaTheta), Math.cos(deltaTheta));
+        
+        // Add extra wraps around the earth for the "circling" effect
+        const wraps = 1.0; // 1 extra full revolution
+        const finalTheta = startSpherical.theta + deltaTheta + (Math.PI * 2 * wraps * Math.sign(deltaTheta || 1));
+        
+        // Interpolate radius (drops faster at the end to simulate decaying orbit)
+        const currentRadius = THREE.MathUtils.lerp(startSpherical.radius, targetSpherical.radius, Math.pow(progress, 3));
+        
+        // Linearly interpolate angles
+        const currentPhi = THREE.MathUtils.lerp(startSpherical.phi, targetSpherical.phi, easedProgress);
+        const currentTheta = THREE.MathUtils.lerp(startSpherical.theta, finalTheta, easedProgress);
+        
+        const currentPos = new THREE.Vector3().setFromSphericalCoords(currentRadius, currentPhi, currentTheta);
+        asteroidGroupRef.current.position.copy(currentPos);
+        
+        // Calculate next position for velocity tangent (to point fire trail)
+        const nextProgress = Math.min(progress + 0.01, 1.0);
+        const nextEased = Math.pow(nextProgress, 1.5);
+        const nextRadius = THREE.MathUtils.lerp(startSpherical.radius, targetSpherical.radius, Math.pow(nextProgress, 3));
+        const nextPhi = THREE.MathUtils.lerp(startSpherical.phi, targetSpherical.phi, nextEased);
+        const nextTheta = THREE.MathUtils.lerp(startSpherical.theta, finalTheta, nextEased);
+        
+        const nextPos = new THREE.Vector3().setFromSphericalCoords(nextRadius, nextPhi, nextTheta);
+        
+        const velocityDir = new THREE.Vector3().subVectors(nextPos, currentPos).normalize();
+        
+        if (fireTrailRef.current && velocityDir.lengthSq() > 0) {
+           const up = new THREE.Vector3(0, 1, 0);
+           const oppDirection = velocityDir.clone().negate();
+           const quaternion = new THREE.Quaternion().setFromUnitVectors(up, oppDirection);
+           fireTrailRef.current.quaternion.copy(quaternion);
+           fireTrailRef.current.position.copy(oppDirection.clone().multiplyScalar(asteroidSize * 1.5));
+        }
+
+        // Cinematic Camera: Pan to get a clear view of the target location
+        // Position camera to look at Earth, but angled to see the impact
+        if (progress < 0.99) {
+          const finalCamPos = targetPosition.clone().normalize().multiplyScalar(4.0);
+          camera.position.lerp(finalCamPos, 0.02);
+          camera.lookAt(0, 0, 0); // Keep focus on Earth as asteroid circles
+        }
+      }
+      
+      if (asteroidRef.current) {
+        asteroidRef.current.rotation.x += 0.05; // Spin
+        asteroidRef.current.rotation.y += 0.05;
+      }
+      
+      if (progress >= 1.0) {
+        setAnimationPhase('exploding');
+        timingRef.current.explosionStart = state.clock.elapsedTime;
+        asteroidGroupRef.current.visible = false;
+      }
+    } else if (animationPhase === 'exploding') {
+      const elapsed = state.clock.elapsedTime - timingRef.current.explosionStart;
+      const duration = 2.0; // Explosion duration
+      
+      if (explosionRef.current) {
+        explosionRef.current.visible = true;
+        const scale = 1 + (elapsed * 15); // Expand steadily
+        explosionRef.current.scale.set(scale, scale, scale);
+        explosionRef.current.material.opacity = Math.max(0, 1.0 - (elapsed / duration));
+      }
+
+      // Stronger screen shake on impact
+      if (elapsed < 1.0) {
+         const shakeIntensity = (1.0 - elapsed) * 0.15; // Fades out
+         camera.position.x += (Math.random() - 0.5) * shakeIntensity;
+         camera.position.y += (Math.random() - 0.5) * shakeIntensity;
+         camera.position.z += (Math.random() - 0.5) * shakeIntensity;
+      }
+      
+      if (elapsed >= duration) {
+        setAnimationPhase('done');
+        if (explosionRef.current) explosionRef.current.visible = false;
+        
+        // Restore default camera position for results view
+        camera.position.set(0, 0, 3);
+        camera.lookAt(0, 0, 0);
+        
+        if (onAnimationComplete) onAnimationComplete();
+      }
     }
   });
 
   return (
     <group ref={orbitRef} position={[0, 0, 0]}>
       {/* Orbit path visualization - bright and visible */}
-      <line geometry={orbitPath}>
-        <lineBasicMaterial 
-          color="#00ff88" 
-          opacity={0.9} 
-          transparent 
-          linewidth={2}
-        />
-      </line>
+      {animationPhase === 'orbiting' && (
+        <line geometry={orbitPath}>
+          <lineBasicMaterial 
+            color="#00ff88" 
+            opacity={0.9} 
+            transparent 
+            linewidth={2}
+          />
+        </line>
+      )}
       
-      {/* Asteroid mesh - simple gray sphere */}
-      <mesh ref={asteroidRef} castShadow receiveShadow>
-        <sphereGeometry args={[asteroidSize, 32, 32]} />
-        <primitive object={asteroidMaterial} attach="material" />
-      </mesh>
+      {/* Group to move the asteroid and its trail */}
+      <group ref={asteroidGroupRef}>
+        {/* Asteroid mesh */}
+        <mesh ref={asteroidRef} castShadow receiveShadow>
+          <sphereGeometry args={[asteroidSize, 32, 32]} />
+          <primitive object={asteroidMaterial} attach="material" />
+        </mesh>
 
-      {/* Name tag */}
-      <Text
-        position={[0, asteroidSize * 1.5, 0]}
-        fontSize={0.08}
-        color="#00ff00"
-        anchorX="center"
-        anchorY="middle"
-        outlineWidth={0.003}
-        outlineColor="#000000"
-      >
-        Impactor-2025
-      </Text>
+        {/* Name tag */}
+        {animationPhase === 'orbiting' && (
+          <Text
+            position={[0, asteroidSize * 1.5, 0]}
+            fontSize={0.08}
+            color="#00ff00"
+            anchorX="center"
+            anchorY="middle"
+            outlineWidth={0.003}
+            outlineColor="#000000"
+          >
+            Impactor-2025
+          </Text>
+        )}
+        
+        {/* Subtle glow / Fire trail */}
+        <mesh ref={fireTrailRef} visible={animationPhase === 'falling'}>
+          <coneGeometry args={[asteroidSize * 1.2, asteroidSize * 5, 16]} />
+          <meshBasicMaterial 
+            color="#ff4400" 
+            transparent 
+            opacity={0.8} 
+            blending={THREE.AdditiveBlending} 
+          />
+        </mesh>
+
+        {/* Subtle glow when orbiting, intense glow when falling */}
+        {animationPhase === 'orbiting' && (
+          <mesh scale={1.2}>
+            <sphereGeometry args={[asteroidSize, 16, 16]} />
+            <meshBasicMaterial 
+              color="#5c4a3d"
+              transparent
+              opacity={0.15}
+              side={THREE.BackSide}
+            />
+          </mesh>
+        )}
+
+        <pointLight 
+          intensity={animationPhase === 'falling' ? 3.0 : 0.5} 
+          distance={animationPhase === 'falling' ? 3.0 : 1.0} 
+          color={animationPhase === 'falling' ? "#ff3300" : "#8b7355"}
+          decay={2.0}
+        />
+      </group>
       
-      {/* Subtle glow for visibility */}
-      <mesh position={asteroidRef.current?.position || [1.8, 0, 0]} scale={1.2}>
-        <sphereGeometry args={[asteroidSize, 16, 16]} />
+      {/* Explosion effect */}
+      <mesh ref={explosionRef} visible={false} position={targetPosition}>
+        <sphereGeometry args={[0.05, 32, 32]} />
         <meshBasicMaterial 
-          color="#5c4a3d"
-          transparent
-          opacity={0.15}
-          side={THREE.BackSide}
+          color="#ffaa00" 
+          transparent 
+          opacity={0.9} 
+          blending={THREE.AdditiveBlending} 
         />
       </mesh>
-      
-      {/* Subtle lighting for asteroid */}
-      <pointLight 
-        position={asteroidRef.current?.position || [2.5, 0, 0]}
-        intensity={0.5} 
-        distance={1.0} 
-        color="#8b7355"
-        decay={2.0}
-      />
     </group>
   );
 }
